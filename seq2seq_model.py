@@ -27,7 +27,7 @@ class Seq2SeqModel(object):
                learning_rate,
                learning_rate_decay_factor,
                use_lstm=True,
-               num_samples=512,
+               num_samples=1024,
                forward_only=False,
                dtype=tf.float32):
     """Create the model.
@@ -71,13 +71,13 @@ class Seq2SeqModel(object):
       b = tf.get_variable("proj_b", [self.target_vocab_size], dtype=dtype)
       output_projection = (w, b)
 
-      def sampled_loss(labels, inputs):
+      def sampled_loss(labels, logits):
         labels = tf.reshape(labels, [-1, 1])
         # We need to compute the sampled_softmax_loss using 32bit floats to
         # avoid numerical instabilities.
         local_w_t = tf.cast(w_t, tf.float32)
         local_b = tf.cast(b, tf.float32)
-        local_inputs = tf.cast(inputs, tf.float32)
+        local_inputs = tf.cast(logits, tf.float32)
         return tf.cast(
             tf.nn.sampled_softmax_loss(
                 weights=local_w_t,
@@ -101,7 +101,7 @@ class Seq2SeqModel(object):
 
     # The seq2seq function: we use embedding for the input.
     def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-      return tf.contrib.legacy_seq2seq.embedding_rnn_seq2seq(
+    	return tf.contrib.legacy_seq2seq.embedding_attention_seq2seq(
           encoder_inputs,
           decoder_inputs,
           cell,
@@ -149,12 +149,12 @@ class Seq2SeqModel(object):
           lambda x, y: seq2seq_f(x, y, False),
           softmax_loss_function=softmax_loss_function)
 
-    # Gradients and AdamOptimizer update operation for training the model.
+    # Gradients and GradientDescentOptimizer update operation for training the model.
     params = tf.trainable_variables()
     if not forward_only:
       self.gradient_norms = []
       self.updates = []
-      opt = tf.train.AdamOptimizer(self.learning_rate)
+      opt = tf.train.GradientDescentOptimizer(self.learning_rate)
       for b in xrange(len(buckets)):
         gradients = tf.gradients(self.losses[b], params)
         clipped_gradients, norm = tf.clip_by_global_norm(gradients,

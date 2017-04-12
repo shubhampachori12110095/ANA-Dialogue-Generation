@@ -39,13 +39,11 @@ def basic_tokenizer(sentence):
 def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
                       tokenizer=None, normalize_digits=True):
   """Create vocabulary file (if it does not exist yet) from data file.
-
   Data file is assumed to contain one sentence per line. Each sentence is
   tokenized and digits are normalized (if normalize_digits is set).
   Vocabulary contains the most-frequent tokens up to max_vocabulary_size.
   We write it to vocabulary_path in a one-token-per-line format, so that later
   token in the first line gets id=0, second line gets id=1, and so on.
-
   Args:
     vocabulary_path: path where the vocabulary will be created.
     data_path: data file that will be used to create vocabulary.
@@ -81,20 +79,16 @@ def create_vocabulary(vocabulary_path, data_path, max_vocabulary_size,
 
 def initialize_vocabulary(vocabulary_path):
   """Initialize vocabulary from file.
-
   We assume the vocabulary is stored one-item-per-line, so a file:
     dog
     cat
   will result in a vocabulary {"dog": 0, "cat": 1}, and this function will
   also return the reversed-vocabulary ["dog", "cat"].
-
   Args:
     vocabulary_path: path to the file containing the vocabulary.
-
   Returns:
     a pair: the vocabulary (a dictionary mapping string to integers), and
     the reversed vocabulary (a list, which reverses the vocabulary mapping).
-
   Raises:
     ValueError: if the provided vocabulary_path does not exist.
   """
@@ -112,18 +106,15 @@ def initialize_vocabulary(vocabulary_path):
 def sentence_to_token_ids(sentence, vocabulary,
                           tokenizer=None, normalize_digits=True):
   """Convert a string to list of integers representing token-ids.
-
   For example, a sentence "I have a dog" may become tokenized into
   ["I", "have", "a", "dog"] and with vocabulary {"I": 1, "have": 2,
   "a": 4, "dog": 7"} this function will return [1, 2, 4, 7].
-
   Args:
     sentence: the sentence in bytes format to convert to token-ids.
     vocabulary: a dictionary mapping tokens to integers.
     tokenizer: a function to use to tokenize each sentence;
       if None, basic_tokenizer will be used.
     normalize_digits: Boolean; if true, all digits are replaced by 0s.
-
   Returns:
     a list of integers, the token-ids for the sentence.
   """
@@ -141,11 +132,9 @@ def sentence_to_token_ids(sentence, vocabulary,
 def data_to_token_ids(data_path, target_path, vocabulary_path,
                       tokenizer=None, normalize_digits=True):
   """Tokenize data file and turn into token-ids using given vocabulary file.
-
   This function loads data line-by-line from data_path, calls the above
   sentence_to_token_ids, and saves the result to target_path. See comment
   for sentence_to_token_ids on the details of token-ids format.
-
   Args:
     data_path: path to the data file in one-sentence-per-line format.
     target_path: path where the file with token-ids will be created.
@@ -171,14 +160,12 @@ def data_to_token_ids(data_path, target_path, vocabulary_path,
 
 def prepare_dialogue_data(data_dir, q_vocabulary_size, r_vocabulary_size, tokenizer=None):
   """Get dialogue data from data_dir, create vocabularies and tokenize data.
-
   Args:
     data_dir: directory in which the data sets will be stored.
     q_vocabulary_size: size of the question vocabulary to create and use.
     r_vocabulary_size: size of the response vocabulary to create and use.
     tokenizer: a function to use to tokenize each data sentence;
       if None, basic_tokenizer will be used.
-
   Returns:
     A tuple of 6 elements:
       (1) path to the token-ids for question training data-set,
@@ -203,7 +190,6 @@ def prepare_dialogue_data(data_dir, q_vocabulary_size, r_vocabulary_size, tokeni
 def prepare_data(data_dir, from_train_path, to_train_path, from_dev_path, to_dev_path, from_vocabulary_size,
                  to_vocabulary_size, tokenizer=None):
   """Preapre all necessary files that are required for the training.
-
     Args:
       data_dir: directory in which the data sets will be stored.
       from_train_path: path to the file that includes "from" training samples.
@@ -214,7 +200,6 @@ def prepare_data(data_dir, from_train_path, to_train_path, from_dev_path, to_dev
       to_vocabulary_size: size of the "to language" vocabulary to create and use.
       tokenizer: a function to use to tokenize each data sentence;
         if None, basic_tokenizer will be used.
-
     Returns:
       A tuple of 6 elements:
         (1) path to the token-ids for "from language" training data-set,
