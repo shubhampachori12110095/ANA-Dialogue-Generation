@@ -21,7 +21,7 @@ import seq2seq_model
 tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99, "Learning rate decays by this much.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
-tf.app.flags.DEFINE_integer("batch_size", 512, "Batch size to use during training.")
+tf.app.flags.DEFINE_integer("batch_size", 256, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("size", 1000, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 4, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("from_vocab_size", 30000, "Question vocabulary size.")
@@ -301,55 +301,54 @@ def decode_file():
 
 
 def decode_shell():
-    # Create model and load parameters.
-    model = create_model(sess, True)
-    model.batch_size = 1  # We decode one sentence at a time.
+    with tf.Session() as sess:
+        # Create model and load parameters.
+        model = create_model(sess, True)
+        model.batch_size = 1  # We decode one sentence at a time.
 
-    # Load vocabularies.
-    q_vocab_path = os.path.join(FLAGS.data_dir,
-                                 "vocab%d.from" % FLAGS.from_vocab_size)
-    r_vocab_path = os.path.join(FLAGS.data_dir,
-                                 "vocab%d.to" % FLAGS.to_vocab_size)
-    q_vocab, _ = data_utils.initialize_vocabulary(q_vocab_path)
-    _, rev_r_vocab = data_utils.initialize_vocabulary(r_vocab_path)
+        # Load vocabularies.
+        q_vocab_path = os.path.join(FLAGS.data_dir,
+                                     "vocab%d.from" % FLAGS.from_vocab_size)
+        r_vocab_path = os.path.join(FLAGS.data_dir,
+                                     "vocab%d.to" % FLAGS.to_vocab_size)
+        q_vocab, _ = data_utils.initialize_vocabulary(q_vocab_path)
+        _, rev_r_vocab = data_utils.initialize_vocabulary(r_vocab_path)
 
-    # Decode from standard input.
-    sys.stdout.write("> ")
-    sys.stdout.flush()
-    sentence = sys.stdin.readline()
-    while sentence:
-      # Get token-ids for the input sentence.
-      token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), q_vocab)
-      # Which bucket does it belong to?
-      bucket_id = len(_buckets) - 1
-      for i, bucket in enumerate(_buckets):
-        if bucket[0] >= len(token_ids):
-          bucket_id = i
-          break
-      else:
-        logging.warning("Sentence truncated: %s", sentence)
+        # Decode from standard input.
+        sys.stdout.write("> ")
+        sys.stdout.flush()
+        sentence = sys.stdin.readline()
+        while sentence:
+          # Get token-ids for the input sentence.
+          token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), q_vocab)
+          # Which bucket does it belong to?
+          bucket_id = len(_buckets) - 1
+          for i, bucket in enumerate(_buckets):
+            if bucket[0] >= len(token_ids):
+              bucket_id = i
+              break
+          else:
+            logging.warning("Sentence truncated: %s", sentence)
 
-      # Get a 1-element batch to feed the sentence to the model.
-      encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-          {bucket_id: [(token_ids, [])]}, bucket_id)
-      # Get output logits for the sentence.
-      _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                       target_weights, bucket_id, True)
+          # Get a 1-element batch to feed the sentence to the model.
+          encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+              {bucket_id: [(token_ids, [])]}, bucket_id)
+          # Get output logits for the sentence.
+          _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                           target_weights, bucket_id, True)
 
-      # This is a greedy decoder - outputs are just argmaxes of output_logits.
-      greedy_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-      # If there is an EOS symbol in outputs, cut them at that point.
-      if data_utils.EOS_ID in greedy_outputs:
-        greedy_outputs = greedy_outputs[:greedy_outputs.index(data_utils.EOS_ID)]
-      # Print out response sentence corresponding to greedy_outputs.
+          # This is a greedy decoder - outputs are just argmaxes of output_logits.
+          greedy_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+          # If there is an EOS symbol in outputs, cut them at that point.
+          if data_utils.EOS_ID in greedy_outputs:
+            greedy_outputs = greedy_outputs[:greedy_outputs.index(data_utils.EOS_ID)]
+          # Print out response sentence corresponding to greedy_outputs.
 
-      response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in greedy_outputs])
-      print(response)
-      print("> ", end="")
-      sys.stdout.flush()
-      sentence = sys.stdin.readline()
-
- return
+          response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in greedy_outputs])
+          print(response)
+          print("> ", end="")
+          sys.stdout.flush()
+          sentence = sys.stdin.readline()
 
 def main(_):
   if FLAGS.decode_file:

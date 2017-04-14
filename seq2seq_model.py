@@ -27,7 +27,7 @@ class Seq2SeqModel(object):
                learning_rate,
                learning_rate_decay_factor,
                use_lstm=True,
-               num_samples=1024,
+               num_samples=512,
                forward_only=False,
                dtype=tf.float32):
     """Create the model.
