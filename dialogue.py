@@ -22,12 +22,12 @@ tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99, "Learning rate decays by this much.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 256, "Batch size to use during training.")
-tf.app.flags.DEFINE_integer("size", 1000, "Size of each model layer.")
-tf.app.flags.DEFINE_integer("num_layers", 4, "Number of layers in the model.")
-tf.app.flags.DEFINE_integer("from_vocab_size", 30000, "Question vocabulary size.")
-tf.app.flags.DEFINE_integer("to_vocab_size", 30000, "Response vocabulary size.")
-tf.app.flags.DEFINE_string("data_dir", "./data.2_3", "Data directory")
-tf.app.flags.DEFINE_string("train_dir", "./param.2_3", "Training directory.")
+tf.app.flags.DEFINE_integer("size", 300, "Size of each model layer.")
+tf.app.flags.DEFINE_integer("num_layers", 2, "Number of layers in the model.")
+tf.app.flags.DEFINE_integer("from_vocab_size", 25000, "Question vocabulary size.")
+tf.app.flags.DEFINE_integer("to_vocab_size", 25000, "Response vocabulary size.")
+tf.app.flags.DEFINE_string("data_dir", "./data.2_6", "Data directory")
+tf.app.flags.DEFINE_string("train_dir", "./atten_params.2_6", "Training directory.")
 tf.app.flags.DEFINE_string("from_train_data", None, "Training data.")
 tf.app.flags.DEFINE_string("to_train_data", None, "Training data.")
 tf.app.flags.DEFINE_string("from_dev_data", None, "Training data.")
@@ -221,9 +221,9 @@ def decode_file():
 
 
     # Decode from test.q file.
-    test_input_file = open(FLAGS.data_dir+"/test.q","r")
-    test_output_file_single = open(FLAGS.data_dir+"/test.r.predicted.single","w")
-    test_output_file_multiple = open(FLAGS.data_dir+"/test.r.predicted.multiple","w")
+    test_input_file = open(FLAGS.data_dir+"/small.test.q","r")
+    test_output_file_single = open(FLAGS.data_dir+"/small.test.r.predicted","w")
+    #test_output_file_multiple = open(FLAGS.data_dir+"/temp.r.predicted.multiple","w")
     lines = test_input_file.readlines()
     lines = [line.strip() for line in lines]
     for sentence in lines:
@@ -257,48 +257,54 @@ def decode_file():
         test_output_file_single.write(response)
         test_output_file_single.write("\n")
 
+	"""
         #n-best results!
-        beam_size = 200
+        beam_size = 5
         current_top_values = []
         current_top_indices = []
         values, indices = tf.nn.top_k(output_logits[0], k=beam_size, sorted=True)
+	values = values.eval()
+	indices = indices.eval()
         for i in range(beam_size):
-            current_top_values.append(values[i].eval())
-            current_top_indices.append(np.array(indices[i].eval()))
-
+            current_top_values.append(values[0][i])
+            current_top_indices.append([indices[0][i]])
 
         index = 1
         while index < len(output_logits):
             values, indices = tf.nn.top_k(output_logits[index], k=beam_size, sorted=True)
+	    values = values.eval()
+            indices = indices.eval()
             temp_values = []
             temp_indices = []
             for i in range(beam_size):
                 for j in range(beam_size):
-                    temp_values.append(current_top_values[i] * values[j].eval())
+                    temp_values.append(current_top_values[i] * values[0][j])
                     temp_list = current_top_indices[i]
-                    temp_indices.append(np.append(temp_list,np.array(indices[j].eval())))
+                    temp_indices.append(np.append(temp_list,np.array(indices[0][j])))
 
 
             tensor_values = np.array(temp_values)
             values, indices = tf.nn.top_k(tensor_values, k=beam_size, sorted=True)
+	    values = values.eval()
+       	    indices = indices.eval()
             current_top_values = []
             current_top_indices = []
             for i in range(beam_size):
-                current_top_values.append(values[i].eval())
-                current_top_indices.append(temp_indices[indices[i].eval()])
+                current_top_values.append(values[i])
+                current_top_indices.append(temp_indices[indices[i]])
 
             index += 1
 
         for each in current_top_indices:
             if data_utils.EOS_ID in each:
-                each = each[:each.index(data_utils.EOS_ID)]
+                each = each[:np.nonzero(each==data_utils.EOS_ID)[0][0]]
 
             response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in each])
             test_output_file_multiple.write(response)
-            test_output_file_multiple.write(" | ")
+            test_output_file_multiple.write(",")
 
         test_output_file_multiple.write("\n")
-
+	"""
 
 def decode_shell():
     with tf.Session() as sess:
@@ -344,10 +350,55 @@ def decode_shell():
             greedy_outputs = greedy_outputs[:greedy_outputs.index(data_utils.EOS_ID)]
           # Print out response sentence corresponding to greedy_outputs.
 
-          response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in greedy_outputs])
-          print(response)
-          print("> ", end="")
+          #response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in greedy_outputs])
+          print("top generated responses")
           sys.stdout.flush()
+	  outputs = []
+	  for each in output_logits:
+		outputs.append(each[0].tolist())
+
+	  beam_size = 100
+          current_top_values = []
+          current_top_indices = []
+	  indices = sorted(range(len(outputs[0])), key=lambda i: outputs[0][i], reverse=True)[:beam_size]
+	  values = [outputs[0][each] for each in indices]
+
+          for i in range(beam_size):
+          	current_top_values.append(values[i])
+          	current_top_indices.append([indices[i]])
+
+          index = 1
+          while index < len(outputs):
+          	indices = sorted(range(len(outputs[index])), key=lambda i: outputs[index][i], reverse=True)[:beam_size]
+         	values = [outputs[index][each] for each in indices]
+          	temp_values = []
+          	temp_indices = []
+          	for i in range(beam_size):
+                	for j in range(beam_size):
+                    		temp_values.append(current_top_values[i] * values[j])
+				list_indices = list(current_top_indices[i])
+				list_indices.append(indices[j])
+                    		temp_indices.append(list_indices)
+
+		indices = sorted(range(len(temp_values)), key=lambda i: temp_values[i], reverse=True)[:beam_size]
+          	values = [temp_values[each] for each in indices]
+
+            	current_top_values = []
+            	current_top_indices = []
+            	for i in range(beam_size):
+                	current_top_values.append(values[i])
+                	current_top_indices.append(temp_indices[indices[i]])
+
+          	index += 1
+	  for each in current_top_indices:
+          	if data_utils.EOS_ID in each:
+                	each = each[:each.index(data_utils.EOS_ID)]
+
+          	response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in each])
+            	print(response)
+          	sys.stdout.flush()
+
+          print(">", end="")
           sentence = sys.stdin.readline()
 
 def main(_):
@@ -360,3 +411,5 @@ def main(_):
 
 if __name__ == "__main__":
   tf.app.run()
+
+
