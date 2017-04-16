@@ -364,7 +364,7 @@ def decode_shell():
                 paths[kk].append(symbol[i][curr[kk]])
                 curr[kk] = path[i][curr[kk]]
           recos = set()
-          print "Replies --------------------------------------->"
+          print("Replies --------------------------------------->")
           for kk in range(beam_size):
               foutputs = [int(logit)  for logit in paths[kk][::-1]]
 
@@ -375,7 +375,7 @@ def decode_shell():
               rec = " ".join([tf.compat.as_str(rev_vocab[output]) for output in foutputs])
               if rec not in recos:
                       recos.add(rec)
-                      print rec
+                      print(rec)
 
           print("> ", "")
           sys.stdout.flush()

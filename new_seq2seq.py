@@ -48,10 +48,6 @@ one of them, others should be easy to substitute.
 This File has been modified by Saeed Najafi to handle beam search decoding!
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 # We disable pylint because we need python3 compatibility.
 from six.moves import xrange  # pylint: disable=redefined-builtin
 from six.moves import zip  # pylint: disable=redefined-builtin
@@ -222,7 +218,7 @@ def beam_rnn_decoder(decoder_inputs, initial_state, cell, loop_function=None,
     outputs = []
     prev = None
     log_beam_probs, beam_path, beam_symbols = [],[],[]
-    state_size = int(initial_state.get_shape().with_rank(2)[1])
+    state_size = cell.state_size
 
     for i, inp in enumerate(decoder_inputs):
       if loop_function is not None and prev is not None:
@@ -797,7 +793,7 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
 
 
 
-    state_size =  int(initial_state.get_shape().with_rank(2)[1])
+    state_size =  cell.state_size
     states =[]
     for kk in range(1):
         states.append(initial_state)
