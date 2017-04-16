@@ -242,10 +242,10 @@ def beam_rnn_decoder(decoder_inputs, initial_state, cell, loop_function=None,
           states =[]
           for kk in range(beam_size):
                 states.append(state)
-          state = tf.reshape(tf.concat(0, states), [-1, state_size])
+          state = tf.reshape(tf.concat(states, 0), [-1, state_size])
 
       outputs.append(tf.argmax(nn_ops.xw_plus_b(output, output_projection[0], output_projection[1]), dimension=1))
-  return outputs, state, tf.reshape(tf.concat(0, beam_path),[-1,beam_size]), tf.reshape(tf.concat(0, beam_symbols),[-1,beam_size])
+  return outputs, state, tf.reshape(tf.concat(beam_path, 0),[-1,beam_size]), tf.reshape(tf.concat(beam_symbols,0),[-1,beam_size])
 
 def basic_rnn_seq2seq(encoder_inputs,
                       decoder_inputs,
@@ -801,7 +801,7 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
     states =[]
     for kk in range(1):
         states.append(initial_state)
-    state = tf.reshape(tf.concat(0, states), [-1, state_size])
+    state = tf.reshape(tf.concat(states, 0), [-1, state_size])
     def attention(query):
       """Put attention masks on hidden using hidden_features and query."""
       ds = []  # Results of attention reads will be stored here.
@@ -832,7 +832,7 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
     if initial_state_attention:
        attns = []
        attns.append(attention(initial_state))
-       tmp = tf.reshape(tf.concat(0, attns), [-1, attn_size])
+       tmp = tf.reshape(tf.concat(attns, 0), [-1, attn_size])
        attns = []
        attns.append(tmp)
 
@@ -866,14 +866,14 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
           states =[]
           for kk in range(beam_size):
                 states.append(state)
-          state = tf.reshape(tf.concat(0, states), [-1, state_size])
+          state = tf.reshape(tf.concat(states, 0), [-1, state_size])
           with variable_scope.variable_scope(variable_scope.get_variable_scope(), reuse=True):
                 attns = attention(state)
 
       outputs.append(tf.argmax(nn_ops.xw_plus_b(
           output, output_projection[0], output_projection[1]), dimension=1))
 
-  return outputs, state, tf.reshape(tf.concat(0, beam_path),[-1,beam_size]), tf.reshape(tf.concat(0, beam_symbols),[-1,beam_size])
+  return outputs, state, tf.reshape(tf.concat(beam_path, 0),[-1,beam_size]), tf.reshape(tf.concat(beam_symbols, 0),[-1,beam_size])
 
 def embedding_attention_decoder(decoder_inputs, initial_state, attention_states,
                                 cell, num_symbols, embedding_size, num_heads=1,
@@ -1016,7 +1016,7 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
     # First calculate a concatenation of encoder outputs to put attention on.
     top_states = [array_ops.reshape(e, [-1, 1, cell.output_size])
                   for e in encoder_outputs]
-    attention_states = array_ops.concat(1, top_states)
+    attention_states = array_ops.concat(top_states, 1)
 
     # Decoder.
     output_size = None
