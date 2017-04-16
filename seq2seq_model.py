@@ -9,7 +9,7 @@ import random
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
-from seq2seq import *
+from new_seq2seq import *
 import data_utils
 
 class Seq2SeqModel(object):
