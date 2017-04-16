@@ -218,7 +218,7 @@ def beam_rnn_decoder(decoder_inputs, initial_state, cell, loop_function=None,
     outputs = []
     prev = None
     log_beam_probs, beam_path, beam_symbols = [],[],[]
-    state_size = cell.state_size
+    state_size = 300
 
     for i, inp in enumerate(decoder_inputs):
       if loop_function is not None and prev is not None:
@@ -793,7 +793,7 @@ def beam_attention_decoder(decoder_inputs, initial_state, attention_states, cell
 
 
 
-    state_size =  cell.state_size
+    state_size =  300
     states =[]
     for kk in range(1):
         states.append(initial_state)
