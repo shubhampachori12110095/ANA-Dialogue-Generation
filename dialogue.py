@@ -34,6 +34,8 @@ tf.app.flags.DEFINE_string("from_dev_data", None, "Training data.")
 tf.app.flags.DEFINE_string("to_dev_data", None, "Training data.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0, "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200, "How many training steps to do per checkpoint.")
+tf.app.flags.DEFINE_integer("beam_size", 10, "beam size for beam search")
+tf.app.flags.DEFINE_boolean("beam_search", True, "Set to True for beam_search")
 tf.app.flags.DEFINE_boolean("decode_file", False, "Set to True for decoding from a file.")
 tf.app.flags.DEFINE_boolean("decode_shell", False, "Set to True for intractive decoding")
 tf.app.flags.DEFINE_boolean("use_fp16", False, "Train using fp16 instead of fp32.")
@@ -82,7 +84,7 @@ def read_data(source_path, target_path, max_size=None):
   return data_set
 
 
-def create_model(session, forward_only):
+def create_model(session, forward_only, beam_search, beam_size):
   """Create dialogue model and initialize or load parameters in session."""
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
   model = seq2seq_model.Seq2SeqModel(
@@ -96,7 +98,8 @@ def create_model(session, forward_only):
       FLAGS.learning_rate,
       FLAGS.learning_rate_decay_factor,
       forward_only=forward_only,
-      dtype=dtype)
+      dtype=dtype,
+      beam_search=beam_search, beam_size=beam_size)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -135,10 +138,13 @@ def train():
       from_train, to_train, from_dev, to_dev, _, _ = data_utils.prepare_dialogue_data(
           FLAGS.data_dir, FLAGS.from_vocab_size, FLAGS.to_vocab_size)
 
+  # Beam search is false during training.
+  beam_search = False
+  beam_size =10
   with tf.Session() as sess:
     # Create model.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
-    model = create_model(sess, False)
+    model = create_model(sess, False, beam_search=beam_search, beam_size=beam_size)
 
     # Read data into buckets and compute their sizes.
     print ("Reading development and training data (limit: %d)."
@@ -170,7 +176,7 @@ def train():
       encoder_inputs, decoder_inputs, target_weights = model.get_batch(
           train_set, bucket_id)
       _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
-                                   target_weights, bucket_id, False)
+                                   target_weights, bucket_id, False, beam_search)
       step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
       loss += step_loss / FLAGS.steps_per_checkpoint
       current_step += 1
@@ -198,7 +204,7 @@ def train():
           encoder_inputs, decoder_inputs, target_weights = model.get_batch(
               dev_set, bucket_id)
           _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
-                                       target_weights, bucket_id, True)
+                                       target_weights, bucket_id, True, beam_search)
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300  else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
@@ -207,8 +213,10 @@ def train():
 
 def decode_file():
   with tf.Session() as sess:
+    beam_size = FLAGS.beam_size
+    beam_search = FLAGS.beam_search
     # Create model and load parameters.
-    model = create_model(sess, True)
+    model = create_model(sess, True, beam_search=beam_search, beam_size=beam_size)
     model.batch_size = 1  # We decode one sentence at a time.
 
     # Load vocabularies.
@@ -308,8 +316,10 @@ def decode_file():
 
 def decode_shell():
     with tf.Session() as sess:
+        beam_size = FLAGS.beam_size
+        beam_search = FLAGS.beam_search
         # Create model and load parameters.
-        model = create_model(sess, True)
+        model = create_model(sess, True, beam_search=beam_search, beam_size=beam_size)
         model.batch_size = 1  # We decode one sentence at a time.
 
         # Load vocabularies.
@@ -340,9 +350,38 @@ def decode_shell():
           encoder_inputs, decoder_inputs, target_weights = model.get_batch(
               {bucket_id: [(token_ids, [])]}, bucket_id)
           # Get output logits for the sentence.
-          _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                           target_weights, bucket_id, True)
+          path, symbol , output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                           target_weights, bucket_id, True, beam_search)
 
+          k = output_logits[0]
+          paths = []
+          for kk in range(beam_size):
+              paths.append([])
+          curr = range(beam_size)
+          num_steps = len(path)
+          for i in range(num_steps-1, -1, -1):
+              for kk in range(beam_size):
+                paths[kk].append(symbol[i][curr[kk]])
+                curr[kk] = path[i][curr[kk]]
+          recos = set()
+          print "Replies --------------------------------------->"
+          for kk in range(beam_size):
+              foutputs = [int(logit)  for logit in paths[kk][::-1]]
+
+          # If there is an EOS symbol in outputs, cut them at that point.
+              if EOS_ID in foutputs:
+          #         # print outputs
+                   foutputs = foutputs[:foutputs.index(EOS_ID)]
+              rec = " ".join([tf.compat.as_str(rev_vocab[output]) for output in foutputs])
+              if rec not in recos:
+                      recos.add(rec)
+                      print rec
+
+          print("> ", "")
+          sys.stdout.flush()
+          sentence = sys.stdin.readline()
+
+          """
           # This is a greedy decoder - outputs are just argmaxes of output_logits.
           greedy_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
           # If there is an EOS symbol in outputs, cut them at that point.
@@ -400,7 +439,8 @@ def decode_shell():
 
           print(">", end="")
           sentence = sys.stdin.readline()
-
+          """
+          
 def main(_):
   if FLAGS.decode_file:
     decode_file()
@@ -411,5 +451,3 @@ def main(_):
 
 if __name__ == "__main__":
   tf.app.run()
-
-
