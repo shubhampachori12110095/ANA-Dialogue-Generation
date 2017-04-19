@@ -18,7 +18,7 @@
 """
 Changes:
 	Sequence-to-sequence model with/without attention mechanism and for multiple buckets.
-    While generating words in the decoder and training, we use a simple heuristic such that the produced word should be different from the generated words in the last two steps.
+	While generating words in the decoder and training, we use a simple heuristic such that the produced word should be different from the generated words in the last two steps.
 """
 
 from __future__ import absolute_import
