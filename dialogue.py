@@ -1,4 +1,22 @@
-"""Binary for training dialogue models and decoding from them.
+# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+"""
+  Changes:
+    Modified for a dialogue generation model with/without attention mechanism, with a simple heuristic, and to be able to intract with the model using shell and finally, conduct experiments on the test set.
+
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -18,7 +36,8 @@ import tensorflow as tf
 import data_utils
 import seq2seq_model
 
-tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
+# A lower learning rate is selected since we train only two epochs and we want to do local search more in the second epoch.
+tf.app.flags.DEFINE_float("learning_rate", 0.35, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99, "Learning rate decays by this much.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 256, "Batch size to use during training.")
@@ -26,16 +45,19 @@ tf.app.flags.DEFINE_integer("size", 300, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 2, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("from_vocab_size", 25000, "Question vocabulary size.")
 tf.app.flags.DEFINE_integer("to_vocab_size", 25000, "Response vocabulary size.")
-tf.app.flags.DEFINE_string("data_dir", "./data.2_6", "Data directory")
-tf.app.flags.DEFINE_string("train_dir", "./atten_params.2_6", "Training directory.")
+tf.app.flags.DEFINE_string("data_dir", "./data", "Data directory")
+tf.app.flags.DEFINE_string("train_dir", "./params", "Training directory.")
 tf.app.flags.DEFINE_string("from_train_data", None, "Training data.")
 tf.app.flags.DEFINE_string("to_train_data", None, "Training data.")
 tf.app.flags.DEFINE_string("from_dev_data", None, "Training data.")
 tf.app.flags.DEFINE_string("to_dev_data", None, "Training data.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0, "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200, "How many training steps to do per checkpoint.")
-tf.app.flags.DEFINE_integer("beam_size", 10, "beam size for beam search")
-tf.app.flags.DEFINE_boolean("beam_search", True, "Set to True for beam_search")
+tf.app.flags.DEFINE_boolean("attention", False, "Set to True for training with attention mechanism.")
+
+# While generating words in the decoder and training, we use a simple heuristic such that the produced word should be different from the generated words in the last two steps.
+tf.app.flags.DEFINE_boolean("heuristic", False, "Set to True for training and decoding with a simple heuristic.")
+
 tf.app.flags.DEFINE_boolean("decode_file", False, "Set to True for decoding from a file.")
 tf.app.flags.DEFINE_boolean("decode_shell", False, "Set to True for intractive decoding")
 tf.app.flags.DEFINE_boolean("use_fp16", False, "Train using fp16 instead of fp32.")
@@ -84,7 +106,7 @@ def read_data(source_path, target_path, max_size=None):
   return data_set
 
 
-def create_model(session, forward_only, beam_search, beam_size):
+def create_model(session, forward_only):
   """Create dialogue model and initialize or load parameters in session."""
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
   model = seq2seq_model.Seq2SeqModel(
@@ -99,7 +121,8 @@ def create_model(session, forward_only, beam_search, beam_size):
       FLAGS.learning_rate_decay_factor,
       forward_only=forward_only,
       dtype=dtype,
-      beam_search=beam_search, beam_size=beam_size)
+      attention=FLAGS.attention,
+      heuristic=FLAGS.heuristic)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -138,13 +161,10 @@ def train():
       from_train, to_train, from_dev, to_dev, _, _ = data_utils.prepare_dialogue_data(
           FLAGS.data_dir, FLAGS.from_vocab_size, FLAGS.to_vocab_size)
 
-  # Beam search is false during training.
-  beam_search = False
-  beam_size =10
   with tf.Session() as sess:
     # Create model.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
-    model = create_model(sess, False, beam_search=beam_search, beam_size=beam_size)
+    model = create_model(sess, False)
 
     # Read data into buckets and compute their sizes.
     print ("Reading development and training data (limit: %d)."
@@ -176,7 +196,7 @@ def train():
       encoder_inputs, decoder_inputs, target_weights = model.get_batch(
           train_set, bucket_id)
       _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
-                                   target_weights, bucket_id, False, beam_search)
+                                   target_weights, bucket_id, False)
       step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
       loss += step_loss / FLAGS.steps_per_checkpoint
       current_step += 1
@@ -204,7 +224,7 @@ def train():
           encoder_inputs, decoder_inputs, target_weights = model.get_batch(
               dev_set, bucket_id)
           _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
-                                       target_weights, bucket_id, True, beam_search)
+                                       target_weights, bucket_id, True)
           eval_ppx = math.exp(float(eval_loss)) if eval_loss < 300  else float(
               "inf")
           print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
@@ -213,10 +233,8 @@ def train():
 
 def decode_file():
   with tf.Session() as sess:
-    beam_size = FLAGS.beam_size
-    beam_search = FLAGS.beam_search
     # Create model and load parameters.
-    model = create_model(sess, True, beam_search=beam_search, beam_size=beam_size)
+    model = create_model(sess, True)
     model.batch_size = 1  # We decode one sentence at a time.
 
     # Load vocabularies.
@@ -229,9 +247,9 @@ def decode_file():
 
 
     # Decode from test.q file.
-    test_input_file = open(FLAGS.data_dir+"/small.test.q","r")
-    test_output_file_single = open(FLAGS.data_dir+"/small.test.r.predicted","w")
-    #test_output_file_multiple = open(FLAGS.data_dir+"/temp.r.predicted.multiple","w")
+    test_input_file = open(FLAGS.data_dir+"/test.q","r")
+    test_output_file = open(FLAGS.data_dir+"/test.r.predicted","w")
+
     lines = test_input_file.readlines()
     lines = [line.strip() for line in lines]
     for sentence in lines:
@@ -262,64 +280,13 @@ def decode_file():
         # Print out response sentence corresponding to greedy_outputs.
 
         response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in greedy_outputs])
-        test_output_file_single.write(response)
-        test_output_file_single.write("\n")
-
-	"""
-        #n-best results!
-        beam_size = 5
-        current_top_values = []
-        current_top_indices = []
-        values, indices = tf.nn.top_k(output_logits[0], k=beam_size, sorted=True)
-	values = values.eval()
-	indices = indices.eval()
-        for i in range(beam_size):
-            current_top_values.append(values[0][i])
-            current_top_indices.append([indices[0][i]])
-
-        index = 1
-        while index < len(output_logits):
-            values, indices = tf.nn.top_k(output_logits[index], k=beam_size, sorted=True)
-	    values = values.eval()
-            indices = indices.eval()
-            temp_values = []
-            temp_indices = []
-            for i in range(beam_size):
-                for j in range(beam_size):
-                    temp_values.append(current_top_values[i] * values[0][j])
-                    temp_list = current_top_indices[i]
-                    temp_indices.append(np.append(temp_list,np.array(indices[0][j])))
-
-
-            tensor_values = np.array(temp_values)
-            values, indices = tf.nn.top_k(tensor_values, k=beam_size, sorted=True)
-	    values = values.eval()
-       	    indices = indices.eval()
-            current_top_values = []
-            current_top_indices = []
-            for i in range(beam_size):
-                current_top_values.append(values[i])
-                current_top_indices.append(temp_indices[indices[i]])
-
-            index += 1
-
-        for each in current_top_indices:
-            if data_utils.EOS_ID in each:
-                each = each[:np.nonzero(each==data_utils.EOS_ID)[0][0]]
-
-            response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in each])
-            test_output_file_multiple.write(response)
-            test_output_file_multiple.write(",")
-
-        test_output_file_multiple.write("\n")
-	"""
+        test_output_file.write(response)
+        test_output_file.write("\n")
 
 def decode_shell():
     with tf.Session() as sess:
-        beam_size = FLAGS.beam_size
-        beam_search = FLAGS.beam_search
         # Create model and load parameters.
-        model = create_model(sess, True, beam_search=beam_search, beam_size=beam_size)
+        model = create_model(sess, True)
         model.batch_size = 1  # We decode one sentence at a time.
 
         # Load vocabularies.
@@ -351,37 +318,8 @@ def decode_shell():
               {bucket_id: [(token_ids, [])]}, bucket_id)
           # Get output logits for the sentence.
           path, symbol , output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                           target_weights, bucket_id, True, beam_search)
+                                           target_weights, bucket_id, True)
 
-          k = output_logits[0]
-          paths = []
-          for kk in range(beam_size):
-              paths.append([])
-          curr = range(beam_size)
-          num_steps = len(path)
-          for i in range(num_steps-1, -1, -1):
-              for kk in range(beam_size):
-                paths[kk].append(symbol[i][curr[kk]])
-                curr[kk] = path[i][curr[kk]]
-          recos = set()
-          print("Replies --------------------------------------->")
-          for kk in range(beam_size):
-              foutputs = [int(logit)  for logit in paths[kk][::-1]]
-
-          # If there is an EOS symbol in outputs, cut them at that point.
-              if EOS_ID in foutputs:
-          #         # print outputs
-                   foutputs = foutputs[:foutputs.index(EOS_ID)]
-              rec = " ".join([tf.compat.as_str(rev_vocab[output]) for output in foutputs])
-              if rec not in recos:
-                      recos.add(rec)
-                      print(rec)
-
-          print("> ", "")
-          sys.stdout.flush()
-          sentence = sys.stdin.readline()
-
-          """
           # This is a greedy decoder - outputs are just argmaxes of output_logits.
           greedy_outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
           # If there is an EOS symbol in outputs, cut them at that point.
@@ -389,57 +327,12 @@ def decode_shell():
             greedy_outputs = greedy_outputs[:greedy_outputs.index(data_utils.EOS_ID)]
           # Print out response sentence corresponding to greedy_outputs.
 
-          #response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in greedy_outputs])
-          print("top generated responses")
-          sys.stdout.flush()
-	  outputs = []
-	  for each in output_logits:
-		outputs.append(each[0].tolist())
-
-	  beam_size = 100
-          current_top_values = []
-          current_top_indices = []
-	  indices = sorted(range(len(outputs[0])), key=lambda i: outputs[0][i], reverse=True)[:beam_size]
-	  values = [outputs[0][each] for each in indices]
-
-          for i in range(beam_size):
-          	current_top_values.append(values[i])
-          	current_top_indices.append([indices[i]])
-
-          index = 1
-          while index < len(outputs):
-          	indices = sorted(range(len(outputs[index])), key=lambda i: outputs[index][i], reverse=True)[:beam_size]
-         	values = [outputs[index][each] for each in indices]
-          	temp_values = []
-          	temp_indices = []
-          	for i in range(beam_size):
-                	for j in range(beam_size):
-                    		temp_values.append(current_top_values[i] * values[j])
-				list_indices = list(current_top_indices[i])
-				list_indices.append(indices[j])
-                    		temp_indices.append(list_indices)
-
-		indices = sorted(range(len(temp_values)), key=lambda i: temp_values[i], reverse=True)[:beam_size]
-          	values = [temp_values[each] for each in indices]
-
-            	current_top_values = []
-            	current_top_indices = []
-            	for i in range(beam_size):
-                	current_top_values.append(values[i])
-                	current_top_indices.append(temp_indices[indices[i]])
-
-          	index += 1
-	  for each in current_top_indices:
-          	if data_utils.EOS_ID in each:
-                	each = each[:each.index(data_utils.EOS_ID)]
-
-          	response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in each])
-            	print(response)
-          	sys.stdout.flush()
-
+          response = " ".join([tf.compat.as_str(rev_r_vocab[output]) for output in greedy_outputs])
+          print("The generated response:")
+          print(response)
           print(">", end="")
+          sys.stdout.flush()
           sentence = sys.stdin.readline()
-          """
           
 def main(_):
   if FLAGS.decode_file:
@@ -451,3 +344,4 @@ def main(_):
 
 if __name__ == "__main__":
   tf.app.run()
+  

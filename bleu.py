@@ -1,3 +1,27 @@
+"""
+MIT License
+
+Copyright (c) 2017 Saeed Najafi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
 import sys
 import nltk
 
@@ -9,7 +33,8 @@ references = [reference.strip() for reference in references]
 hypothesis = hypothesis_file.readlines()
 hypothesis = [hypo.strip() for hypo in hypothesis]
 
-#We are using sentence level smoothing for the bleu score. We apply the method7() introduced in this paper http://acl2014.org/acl2014/W14-33/pdf/W14-3346.pdf
+# We are using sentence level smoothing for the bleu score. 
+# We apply the method7() introduced in this paper http://acl2014.org/acl2014/W14-33/pdf/W14-3346.pdf
 SF = nltk.translate.bleu_score.SmoothingFunction()
 score = 0.0
 index = 0
