@@ -15,27 +15,25 @@
 
 """Sequence-to-sequence model."""
 
-"""
-Changes:
-	Sequence-to-sequence model with/without attention mechanism and for multiple buckets.
-	While generating words in the decoder and training, we use a simple heuristic such that the produced word should be different from the generated words in the last two steps.
-"""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+"""
+Changes:
+	Sequence-to-sequence model with/without attention mechanism and for multiple buckets.
+"""
 
 import random
 
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
-from seq2seq inmport *
+from seq2seq import *
 import data_utils
 
 class Seq2SeqModel(object):
   """Sequence-to-sequence model with/without attention mechanism and for multiple buckets.
-     While generating words in the decoder and training, we use a simple heuristic such that the produced word should be different from the generated words in the last two steps.
   """
 
   def __init__(self,
@@ -52,8 +50,7 @@ class Seq2SeqModel(object):
                num_samples=1024,
                forward_only=False,
                dtype=tf.float32,
-               attention=False,
-               heuristic=False):
+               attention=False):
 
     """Create the model.
 
@@ -78,9 +75,6 @@ class Seq2SeqModel(object):
       forward_only: if set, we do not construct the backward pass in the model.
       dtype: the data type to use to store internal variables.
       attention: A boolean. When it's true, then we use attention mechanism while training the model.
-      heuristic: A boolean. When it's true, then while generating words in the decoder, 
-                 we use a simple heuristic such that the produced word should be different
-                 from generated words in the last two steps.
     """
     self.source_vocab_size = source_vocab_size
     self.target_vocab_size = target_vocab_size
@@ -119,7 +113,12 @@ class Seq2SeqModel(object):
         softmax_loss_function = sampled_loss
 
     # Create the internal multi-layer cell for our RNN.
-    cell = tf.contrib.rnn.BasicLSTMCell(size)
+    def single_cell():
+      return tf.contrib.rnn.GRUCell(size)
+    if use_lstm:
+      def single_cell():
+        return tf.contrib.rnn.BasicLSTMCell(size)
+    cell = single_cell()
     if num_layers > 1:
       cell = tf.contrib.rnn.MultiRNNCell([single_cell() for _ in range(num_layers)])
 
@@ -135,8 +134,7 @@ class Seq2SeqModel(object):
             embedding_size=size,
             output_projection=output_projection,
             feed_previous=do_decode,
-            dtype=dtype,
-            heuristic=heuristic)
+            dtype=dtype)
     else:
       # The seq2seq function: we use embedding for the input. without attention!
       def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
@@ -149,8 +147,7 @@ class Seq2SeqModel(object):
             embedding_size=size,
             output_projection=output_projection,
             feed_previous=do_decode,
-            dtype=dtype,
-            heuristic=heuristic)
+            dtype=dtype)
 
 
     # Feeds for inputs.
@@ -175,8 +172,8 @@ class Seq2SeqModel(object):
 
       # If we use output projection, we need to project outputs for decoding.
       if output_projection is not None:
-      for b in xrange(len(buckets)):
-        self.outputs[b] = [ tf.matmul(output, output_projection[0]) + output_projection[1] for output in self.outputs[b] ]
+      	for b in xrange(len(buckets)):
+        	self.outputs[b] = [ tf.matmul(output, output_projection[0]) + output_projection[1] for output in self.outputs[b] ]
 
     else:
       self.outputs, self.losses = model_with_buckets(

@@ -45,15 +45,6 @@ one of them, others should be easy to substitute.
     (see the tutorial above for an explanation of why and how to use it).
 """
 
-
-"""
-  Changes:
-    A simple heuristic is added to the loop_function, embedding_rnn_seq2seq and embedding_attention_seq2seq such that 
-    while generating words in the decoder and training, the produced word should be different from the generated words in the last two steps.
-
-"""
-
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -293,8 +284,7 @@ def embedding_rnn_seq2seq(encoder_inputs,
                           output_projection=None,
                           feed_previous=False,
                           dtype=None,
-                          scope=None,
-                          heuristic=heuristic):
+                          scope=None):
   """Embedding RNN sequence-to-sequence model.
   This model first embeds encoder_inputs by a newly created embedding (of shape
   [num_encoder_symbols x input_size]). Then it runs an RNN to encode
@@ -769,8 +759,7 @@ def embedding_attention_seq2seq(encoder_inputs,
                                 feed_previous=False,
                                 dtype=None,
                                 scope=None,
-                                initial_state_attention=False,
-                                heuristic=heuristic):
+                                initial_state_attention=False):
   """Embedding sequence-to-sequence model with attention.
   This model first embeds encoder_inputs by a newly created embedding (of shape
   [num_encoder_symbols x input_size]). Then it runs an RNN to encode

@@ -13,14 +13,16 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-  Changes:
-    Modified for a dialogue generation model with/without attention mechanism, with a simple heuristic, and to be able to intract with the model using shell and finally, conduct experiments on the test set.
-
-"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+
+"""
+  Changes:
+    Modified for a dialogue generation model with/without attention mechanism, and to be able to intract with the model using shell and finally, conduct experiments on the test set.
+
+"""
 
 import math
 import os
@@ -46,19 +48,16 @@ tf.app.flags.DEFINE_integer("num_layers", 2, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("from_vocab_size", 25000, "Question vocabulary size.")
 tf.app.flags.DEFINE_integer("to_vocab_size", 25000, "Response vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "./data", "Data directory")
-tf.app.flags.DEFINE_string("train_dir", "./params", "Training directory.")
+tf.app.flags.DEFINE_string("train_dir", "./params.with.attention", "Training directory.")
 tf.app.flags.DEFINE_string("from_train_data", None, "Training data.")
 tf.app.flags.DEFINE_string("to_train_data", None, "Training data.")
 tf.app.flags.DEFINE_string("from_dev_data", None, "Training data.")
 tf.app.flags.DEFINE_string("to_dev_data", None, "Training data.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 0, "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200, "How many training steps to do per checkpoint.")
-tf.app.flags.DEFINE_boolean("attention", False, "Set to True for training with attention mechanism.")
-
-# While generating words in the decoder and training, we use a simple heuristic such that the produced word should be different from the generated words in the last two steps.
-tf.app.flags.DEFINE_boolean("heuristic", False, "Set to True for training and decoding with a simple heuristic.")
-
+tf.app.flags.DEFINE_boolean("attention", True, "Set to True for training with attention mechanism.")
 tf.app.flags.DEFINE_boolean("decode_file", False, "Set to True for decoding from a file.")
+tf.app.flags.DEFINE_boolean("decode_heuristic", False, "Set to True for using a simple heuristic while decoding.")
 tf.app.flags.DEFINE_boolean("decode_shell", False, "Set to True for intractive decoding")
 tf.app.flags.DEFINE_boolean("use_fp16", False, "Train using fp16 instead of fp32.")
 
@@ -121,8 +120,7 @@ def create_model(session, forward_only):
       FLAGS.learning_rate_decay_factor,
       forward_only=forward_only,
       dtype=dtype,
-      attention=FLAGS.attention,
-      heuristic=FLAGS.heuristic)
+      attention=FLAGS.attention)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
