@@ -4,7 +4,7 @@
 Download the preprocessed version of the dataset from this link:
 https://drive.google.com/file/d/0B_18bOXmh2WJNVZTOWw2SDRPYTg/view?usp=sharing
 
-After downloading and unziping, the `data` directory will contain the following files:
+After downloading, the `data` directory will contain the following files:
 
 `train.q`: questions (given utternaces) for training dataset
 
